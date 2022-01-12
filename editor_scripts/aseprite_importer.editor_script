@@ -1,0 +1,175 @@
+local json = require("third_party.json")
+
+local M = {}
+
+local function ends_with(str, ending)
+    return ending == "" or str:sub(-#ending) == ending
+end
+
+local function basename_without_ext(filepath)
+    return filepath:match("^.+/(.+)%..+$")
+end
+
+local function dirpath(filepath)
+    return filepath:match("(.*[/\\])")
+end
+
+local function image_template(image)
+    return [[images {
+  image: "]] .. image .. [["
+}
+]]
+end
+
+function aseprite_bin()
+    return "Aseprite"
+end
+
+function open_in_aseprite(opts)
+    local filepath = editor.get(opts.selection, "path")
+    local binpath = aseprite_bin()
+    return {{
+        action = "shell",
+        command = {aseprite_bin(), filepath:sub(2)}
+    }}
+end
+
+function extract_aseprite(opts)
+    local filepath = editor.get(opts.selection, "path")
+    local base = basename_without_ext(filepath)
+    local dir = "." .. dirpath(filepath)
+    local binpath = aseprite_bin()
+    local output_img = dir .. base .. "/" .. "1.png"
+    local output_data = dir .. base .. ".json"
+    return {{
+        -- import as sheet
+        action = "shell",
+        command = {aseprite_bin(), "-b", filepath:sub(2), "--save-as", output_img, "--list-tags", "--data", output_data}
+    }}
+end
+
+function playbackstr(direct)
+    if direct == "forward" then
+        -- return "PLAYBACK_ONCE_FORWARD"
+        return "PLAYBACK_LOOP_FORWARD"
+    elseif direct == "reverse" then
+        return "PLAYBACK_LOOP_BACKWARD"
+    elseif direct == "pingpong" then
+        return "PLAYBACK_LOOP_PINGPONG"
+    end
+    return "PLAYBACK_LOOP_FORWARD"
+end
+
+function frame_to_image(basedir, frame)
+    return [[images{
+        image: "]] .. basedir .. (frame + 1) .. [[.png"
+    }
+    ]]
+end
+
+function frames_to_image_list(basedir, start_frame, end_frame)
+    local image_array = ""
+    for i = start_frame, end_frame, 1 do
+        image_array = image_array .. frame_to_image(basedir, i)
+    end
+    return image_array
+end
+
+function tag_to_animation(tag, basedir, start_frame, end_frame)
+    local id = tag["name"]
+    local playback = playbackstr(tag["direction"])
+    local fps = 60
+    local flip_horizontal = 0
+    local flip_vertical = 0
+    return [[animations {
+
+    id: "]] .. id .. [["
+
+    ]] .. frames_to_image_list(basedir, tag["from"], tag["to"]) .. [[
+
+    playback: ]] .. playback .. [[
+
+    fps: ]] .. fps .. [[
+
+    flip_horizontal: ]] .. flip_horizontal .. [[
+
+    flip_vertical: ]] .. flip_vertical .. [[
+
+}
+]]
+end
+
+function atlas_footer()
+    return [[
+margin: 0
+extrude_borders: 2
+inner_padding: 0]]
+end
+
+function create_atlas(opts)
+    local filepath = editor.get(opts.selection, "path")
+    local base = basename_without_ext(filepath)
+    local dir = dirpath(filepath)
+    local binpath = aseprite_bin()
+    local basedir = dir .. base .. "/"
+    local output_data = "." .. dir .. base .. ".json"
+    local atlas = "." .. dir .. base .. ".atlas"
+
+    -- load tags from meta info
+    local tmp = io.open(output_data, "r")
+    local ase_meta = json.decode(tmp:read("*a"))["meta"]
+
+    if ase_meta["frameTags"] ~= nil then
+        local tags = ase_meta["frameTags"]
+        local atlas = io.open(atlas, "w")
+        for k, tag in pairs(tags) do
+            atlas:write(tag_to_animation(tag, basedir))
+        end
+        atlas:write(atlas_footer())
+    end
+
+end
+
+function check_extension(opts)
+    local filepath = editor.get(opts.selection, "path")
+    return ends_with(filepath, ".ase") or ends_with(filepath, ".aseprite")
+end
+
+function M.get_commands()
+    return {{
+        label = "Open in Aseprite",
+        locations = {"Assets"},
+        query = {
+            selection = {
+                type = "resource",
+                cardinality = "one"
+            }
+        },
+        active = check_extension,
+        run = open_in_aseprite
+    }, {
+        label = "Extract Aseprite",
+        locations = {"Assets"},
+        query = {
+            selection = {
+                type = "resource",
+                cardinality = "one"
+            }
+        },
+        active = check_extension,
+        run = extract_aseprite
+    }, {
+        label = "Create Atlas from Aseprite",
+        locations = {"Assets"},
+        query = {
+            selection = {
+                type = "resource",
+                cardinality = "one"
+            }
+        },
+        active = check_extension,
+        run = create_atlas
+    }}
+end
+
+return M
