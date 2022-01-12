@@ -15,7 +15,7 @@ If you have installed Aseprite from Steam, [here](https://community.aseprite.org
 
 You can use DAS in your own project by adding this project as a [Defold library dependency](http://www.defold.com/manuals/libraries/). Open your game.project file and in the dependencies field under project add:
 
-https://github.com/masakazu-k/defold-aseprite-scripts/archive/master.zip
+https://github.com/masakazu-k/defold-aseprite-scripts/archive/main.zip
 
 Or point to the ZIP file of a [specific release](https://github.com/masakazu-k/defold-aseprite-scripts/releases).
 
